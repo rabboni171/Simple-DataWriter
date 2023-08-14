@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -15,21 +17,33 @@ func main() {
 	done := make(chan bool)
 
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				done <- false // Send failure response to the channel
-			}
-		}()
-
 		WriteDataToFile(done)
 	}()
 
 	success := <-done
-	if success {
-		InsertToDb()
-	} else {
+	if !success {
 		fmt.Println("Failed to write data to file.")
+		return
 	}
+
+	InsertToDb()
+
+	deleteSuccess := false
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		deleteSuccess = DeleteFile()
+		wg.Done()
+	}()
+
+	wg.Wait()
+
+	if deleteSuccess {
+		fmt.Println("File deleted successfully!")
+	} else {
+		fmt.Println("Failed to delete file.")
+	}
+
 }
 
 func InsertToDb() {
@@ -80,4 +94,16 @@ func WriteDataToFile(done chan bool) {
 	fmt.Println("Writing to file is completed")
 
 	done <- true
+}
+
+func DeleteFile() bool {
+	time.Sleep(15 * time.Second) // Wait for 15 seconds before deleting the file
+
+	err := os.Remove("D:\\data.csv")
+	if err != nil {
+		log.Printf("Failed to delete file: %s", err)
+		return false
+	}
+
+	return true
 }
